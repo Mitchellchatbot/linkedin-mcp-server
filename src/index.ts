@@ -517,6 +517,9 @@ async function handleMcp(req: express.Request, res: express.Response) {
   if (req.method === "GET" || (req.method === "POST" && !sessionId)) {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
+      // Send a keep-alive comment every 20s so Railway's proxy (30s timeout)
+      // doesn't drop the SSE connection while Claude waits for tool results
+      enableJsonResponse: false,
     });
 
     const server = createMcpServer();
@@ -601,4 +604,17 @@ app.listen(PORT, () => {
   console.log(`   MCP:         ${BASE_URL}/mcp`);
   console.log(`   Auth login:  ${BASE_URL}/auth/login`);
   console.log(`   Auth status: ${BASE_URL}/auth/status\n`);
+
+  // Self-ping every 4 minutes to prevent Railway from sleeping the container.
+  // Railway free tier sleeps after ~5 min of inactivity; this keeps it warm.
+  const PING_INTERVAL_MS = 4 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const http = await import("http");
+      const url = new URL(`${BASE_URL}/health`);
+      http.get({ hostname: url.hostname, path: url.pathname, port: url.port || 80 }, (r) => {
+        r.resume(); // drain response
+      }).on("error", () => {}); // ignore errors silently
+    } catch {}
+  }, PING_INTERVAL_MS);
 });
