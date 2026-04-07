@@ -138,10 +138,36 @@ app.get("/auth/callback", async (req, res) => {
     // Also set as global so MCP tools can use it without passing session
     setGlobalToken(accessToken, expiresIn);
     res.send(`
-      <html><body style="font-family:sans-serif;padding:2rem">
+      <html>
+      <head><style>
+        body{font-family:sans-serif;padding:2rem;max-width:600px;margin:0 auto}
+        .token-box{background:#f4f4f4;border:1px solid #ddd;border-radius:6px;padding:1rem;word-break:break-all;font-family:monospace;font-size:13px;margin:1rem 0}
+        .btn{background:#0077b5;color:#fff;border:none;padding:.6rem 1.2rem;border-radius:4px;cursor:pointer;font-size:14px}
+        .btn:hover{background:#005e91}
+        .warn{background:#fff8e1;border:1px solid #f0c040;border-radius:6px;padding:.8rem 1rem;font-size:13px;margin-top:1rem}
+        .steps{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;padding:.8rem 1rem;font-size:13px;margin-top:1rem}
+        ol{margin:.5rem 0;padding-left:1.2rem}
+      </style></head>
+      <body>
         <h2>✅ LinkedIn Connected!</h2>
-        <p>Your LinkedIn account is now linked to Claude. You can close this tab.</p>
-        <p><small>Token expires in ${Math.round(expiresIn / 3600)} hours.</small></p>
+        <p>Copy your access token below and save it as a Railway environment variable so it survives redeploys.</p>
+
+        <div class="token-box" id="token">${accessToken}</div>
+        <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('token').innerText).then(()=>this.innerText='✅ Copied!')">Copy Token</button>
+
+        <div class="steps">
+          <strong>Save to Railway (one-time setup):</strong>
+          <ol>
+            <li>Go to your Railway project → <b>Variables</b> tab</li>
+            <li>Add variable: <code>LINKEDIN_ACCESS_TOKEN</code> = <em>(paste token)</em></li>
+            <li>Railway will redeploy automatically — token will now survive restarts</li>
+          </ol>
+        </div>
+
+        <div class="warn">
+          ⚠️ Keep this token private — it grants access to your LinkedIn account.<br>
+          Token expires in <strong>${Math.round(expiresIn / 3600)} hours</strong> (re-run /auth/login when it expires).
+        </div>
       </body></html>
     `);
   } catch (err: any) {
