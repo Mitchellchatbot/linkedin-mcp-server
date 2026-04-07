@@ -1,8 +1,9 @@
 import express from "express";
 import cors from "cors";
 import session from "express-session";
+import { randomUUID } from "crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -458,34 +459,59 @@ function createMcpServer(): Server {
   return server;
 }
 
-// ── SSE MCP endpoint ──────────────────────────────────────────────────────────
+// ── Streamable HTTP MCP endpoint (MCP spec 2025-03-26) ───────────────────────
 
-// Track active SSE transports so we can route POST messages
-const activeTransports = new Map<string, SSEServerTransport>();
+const activeTransports = new Map<string, StreamableHTTPServerTransport>();
 
-app.get("/mcp/sse", async (req, res) => {
-  console.log("[mcp] New SSE connection");
-  const transport = new SSEServerTransport("/mcp/messages", res);
-  const sessionId = transport.sessionId;
-  activeTransports.set(sessionId, transport);
+async function handleMcp(req: express.Request, res: express.Response) {
+  const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-  const server = createMcpServer();
-  await server.connect(transport);
-
-  res.on("close", () => {
-    console.log(`[mcp] SSE connection closed: ${sessionId}`);
-    activeTransports.delete(sessionId);
-  });
-});
-
-app.post("/mcp/messages", async (req, res) => {
-  const sessionId = req.query.sessionId as string;
-  const transport = activeTransports.get(sessionId);
-  if (!transport) {
-    res.status(404).json({ error: "Session not found" });
+  // Reuse existing session
+  if (sessionId && activeTransports.has(sessionId)) {
+    const transport = activeTransports.get(sessionId)!;
+    await transport.handleRequest(req, res, req.body);
     return;
   }
-  await transport.handlePostMessage(req, res);
+
+  // New session (POST with initialize) or GET for SSE stream
+  if (req.method === "GET" || (req.method === "POST" && !sessionId)) {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+    });
+
+    const server = createMcpServer();
+    await server.connect(transport);
+
+    transport.onclose = () => {
+      if (transport.sessionId) {
+        activeTransports.delete(transport.sessionId);
+        console.log(`[mcp] Session closed: ${transport.sessionId}`);
+      }
+    };
+
+    await transport.handleRequest(req, res, req.body);
+
+    if (transport.sessionId) {
+      activeTransports.set(transport.sessionId, transport);
+      console.log(`[mcp] New session: ${transport.sessionId}`);
+    }
+    return;
+  }
+
+  res.status(400).json({ error: "Bad request" });
+}
+
+app.get("/mcp", handleMcp);
+app.post("/mcp", handleMcp);
+app.delete("/mcp", async (req, res) => {
+  const sessionId = req.headers["mcp-session-id"] as string | undefined;
+  if (sessionId && activeTransports.has(sessionId)) {
+    await activeTransports.get(sessionId)!.close();
+    activeTransports.delete(sessionId);
+    res.status(200).json({ ok: true });
+  } else {
+    res.status(404).json({ error: "Session not found" });
+  }
 });
 
 // ── Health & info ─────────────────────────────────────────────────────────────
@@ -496,14 +522,14 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     status: "running",
     endpoints: {
-      mcp_sse: `${BASE_URL}/mcp/sse`,
+      mcp: `${BASE_URL}/mcp`,
       auth_login: `${BASE_URL}/auth/login`,
       auth_status: `${BASE_URL}/auth/status`,
       health: `${BASE_URL}/health`,
     },
     instructions: {
       step1: `Visit ${BASE_URL}/auth/login to connect your LinkedIn account`,
-      step2: `Add MCP server in Claude with URL: ${BASE_URL}/mcp/sse`,
+      step2: `Add MCP server in Claude with URL: ${BASE_URL}/mcp`,
     },
   });
 });
@@ -517,7 +543,7 @@ app.get("/health", (_req, res) => {
 app.listen(PORT, () => {
   console.log(`\n🚀 LinkedIn MCP Server running on port ${PORT}`);
   console.log(`   Home:        ${BASE_URL}/`);
-  console.log(`   MCP SSE:     ${BASE_URL}/mcp/sse`);
+  console.log(`   MCP:         ${BASE_URL}/mcp`);
   console.log(`   Auth login:  ${BASE_URL}/auth/login`);
   console.log(`   Auth status: ${BASE_URL}/auth/status\n`);
 });
