@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import session from "express-session";
 import { randomUUID } from "crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -48,14 +49,16 @@ if (process.env.LINKEDIN_ACCESS_TOKEN) {
 // ── Express app ──────────────────────────────────────────────────────────────
 
 const app = express();
-app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "mcp-session-id"] }));
+app.set("trust proxy", 1); // Required behind Railway's reverse proxy
+app.use(cookieParser());
+app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS", "DELETE"], allowedHeaders: ["Content-Type", "Authorization", "mcp-session-id"] }));
 app.use(express.json());
 app.use(
   session({
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: BASE_URL.startsWith("https"), maxAge: 3600000 },
+    cookie: { secure: BASE_URL.startsWith("https"), sameSite: "lax", maxAge: 3600000 },
   })
 );
 
@@ -91,7 +94,14 @@ app.get("/auth/login", (req, res) => {
     return;
   }
   const state = generateState();
+  // Store state in both session and a plain cookie for reliability behind proxies
   req.session.oauthState = state;
+  res.cookie("oauth_state", state, {
+    httpOnly: true,
+    secure: BASE_URL.startsWith("https"),
+    sameSite: "lax",
+    maxAge: 600000, // 10 minutes
+  });
   const authUrl = generateAuthUrl(CLIENT_ID, REDIRECT_URI, state);
   res.redirect(authUrl);
 });
@@ -104,10 +114,14 @@ app.get("/auth/callback", async (req, res) => {
     return;
   }
 
-  if (state !== req.session.oauthState) {
+  // Accept state match from either session or cookie
+  const cookieState = req.cookies?.oauth_state;
+  const sessionState = req.session.oauthState;
+  if (state !== cookieState && state !== sessionState) {
     res.status(400).send("Invalid OAuth state — possible CSRF. Please try again.");
     return;
   }
+  res.clearCookie("oauth_state");
 
   try {
     const { accessToken, expiresIn } = await exchangeCodeForToken(
