@@ -34,7 +34,7 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 const CLIENT_ID = process.env.LINKEDIN_CLIENT_ID || "";
 const CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET || "";
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production";
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
 // If you already have a long-lived access token, set it here to skip OAuth
