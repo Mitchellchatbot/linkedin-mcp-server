@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import session from "express-session";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
@@ -46,6 +47,7 @@ if (process.env.LINKEDIN_ACCESS_TOKEN) {
 // ── Express app ──────────────────────────────────────────────────────────────
 
 const app = express();
+app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "mcp-session-id"] }));
 app.use(express.json());
 app.use(
   session({
