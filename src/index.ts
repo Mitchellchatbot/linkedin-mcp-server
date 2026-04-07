@@ -515,7 +515,22 @@ async function handleMcp(req: express.Request, res: express.Response) {
   res.status(400).json({ error: "Bad request" });
 }
 
-app.get("/mcp", handleMcp);
+// GET /mcp — serve SSE stream for real MCP clients; return 200 JSON for plain
+// HTTP checks (e.g. Claude's reachability probe) so it doesn't show "unreachable"
+app.get("/mcp", async (req, res) => {
+  const accept = req.headers.accept ?? "";
+  if (!accept.includes("text/event-stream")) {
+    res.json({
+      name: "linkedin-mcp",
+      version: "1.0.0",
+      transport: "streamable-http",
+      mcpEndpoint: `${BASE_URL}/mcp`,
+      status: "ready",
+    });
+    return;
+  }
+  await handleMcp(req, res);
+});
 app.post("/mcp", handleMcp);
 app.delete("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
