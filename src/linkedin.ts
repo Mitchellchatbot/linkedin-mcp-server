@@ -89,14 +89,44 @@ export async function createPost(
 }
 
 // ── Get my posts ──────────────────────────────────────────────────────────────
-// Reading posts requires r_member_social which is only available to LinkedIn
-// Marketing API partners — not standard developer apps.
+// Try the newer REST Posts API first (202401), then fall back to ugcPosts.
+// Both require w_member_social; reading may still 403 on non-partner apps.
 
 export async function getMyPosts(
   accessToken: string,
   authorUrn: string,
   count = 10
 ): Promise<LinkedInPost[]> {
+  // 1️⃣ Try the newer /rest/posts endpoint (LinkedIn-Version 202401)
+  try {
+    const encoded = encodeURIComponent(authorUrn);
+    const res = await axios.get(
+      `https://api.linkedin.com/rest/posts?author=${encoded}&q=author&count=${count}&sortBy=LAST_MODIFIED`,
+      {
+        headers: {
+          ...authHeader(accessToken),
+          "LinkedIn-Version": "202401",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
+    );
+
+    const elements = res.data.elements || [];
+    if (elements.length > 0) {
+      return elements.map((el: any) => ({
+        id: el.id,
+        text: el.commentary || el.text?.text || "",
+        createdAt: el.publishedAt || el.createdAt || 0,
+      }));
+    }
+  } catch (restErr: any) {
+    // If it's not a 403 bubble it up, otherwise fall through to ugcPosts
+    if (restErr.response?.status !== 403) {
+      console.error("[linkedin] REST posts error:", restErr.response?.data || restErr.message);
+    }
+  }
+
+  // 2️⃣ Fall back to ugcPosts API
   try {
     const encoded = encodeURIComponent(authorUrn);
     const res = await axios.get(
@@ -120,8 +150,9 @@ export async function getMyPosts(
   } catch (err: any) {
     if (err.response?.status === 403) {
       throw new Error(
-        "Reading posts requires the r_member_social scope, which is only available to LinkedIn Marketing API partners. " +
-        "Standard developer apps can create posts but cannot read them via the API."
+        "LinkedIn's API does not allow reading posts for standard developer apps — " +
+        "this requires the r_member_social scope which is only granted to LinkedIn Marketing API partners. " +
+        "You can still CREATE posts with this integration."
       );
     }
     throw err;
