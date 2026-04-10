@@ -68,7 +68,7 @@ function authHeader(accessToken: string) {
 function restHeaders(accessToken: string) {
   return {
     ...authHeader(accessToken),
-    "LinkedIn-Version": "202401",
+    "LinkedIn-Version": "202504",
     "X-Restli-Protocol-Version": "2.0.0",
   };
 }
