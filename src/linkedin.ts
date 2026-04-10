@@ -177,6 +177,69 @@ export async function getMyPosts(
   }
 }
 
+// ── Post comments ─────────────────────────────────────────────────────────────
+// Requires r_organization_social
+
+export async function getPostComments(
+  accessToken: string,
+  postUrn: string,
+  count = 20
+): Promise<{ id: string; actor: string; message: string; createdAt: number }[]> {
+  const encoded = encodeURIComponent(postUrn);
+  const res = await axios.get(
+    `${LINKEDIN_REST_BASE}/socialActions/${encoded}/comments?count=${count}`,
+    { headers: restHeaders(accessToken) }
+  );
+
+  return (res.data.elements || []).map((el: any) => ({
+    id: el.id || "",
+    actor: el.actor || "",
+    message: el.message?.text || "",
+    createdAt: el.created?.time || 0,
+  }));
+}
+
+// ── Post reactions ────────────────────────────────────────────────────────────
+// Requires r_organization_social
+
+export async function getPostReactions(
+  accessToken: string,
+  postUrn: string,
+  count = 50
+): Promise<{ actor: string; reactionType: string }[]> {
+  const encoded = encodeURIComponent(postUrn);
+  const res = await axios.get(
+    `${LINKEDIN_REST_BASE}/reactions/${encoded}?count=${count}`,
+    { headers: restHeaders(accessToken) }
+  );
+
+  return (res.data.elements || []).map((el: any) => ({
+    actor: el.actor || "",
+    reactionType: el.reactionType || "LIKE",
+  }));
+}
+
+// ── Post social stats (likes, comments, shares, impressions) ──────────────────
+// Requires r_organization_social
+
+export async function getPostSocialStats(
+  accessToken: string,
+  postUrns: string[]
+): Promise<object[]> {
+  const ids = postUrns.map(u => `List(${encodeURIComponent(u)})`).join("&ids=");
+  const res = await axios.get(
+    `${LINKEDIN_API_BASE}/socialMetadata?ids=List(${postUrns.map(encodeURIComponent).join(",")})`,
+    {
+      headers: {
+        ...authHeader(accessToken),
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    }
+  );
+
+  return Object.values(res.data.results || {});
+}
+
 // ── Delete post ───────────────────────────────────────────────────────────────
 
 export async function deletePost(accessToken: string, postId: string): Promise<void> {

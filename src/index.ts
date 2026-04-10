@@ -29,6 +29,9 @@ import {
   deletePost,
   getOrgPages,
   getOrgPosts,
+  getPostComments,
+  getPostReactions,
+  getPostSocialStats,
   createOrgPost,
   getOrgFollowerStats,
   getOrgPageStats,
@@ -288,6 +291,45 @@ function createMcpServer(): Server {
             text: { type: "string", description: "Post text (max 3000 chars)." },
           },
           required: ["orgUrn", "text"],
+        },
+      },
+      {
+        name: "linkedin_get_post_comments",
+        description: "Get comments on a LinkedIn post (personal or org). Requires r_organization_social for org posts.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            postUrn: { type: "string", description: "Full post URN (e.g. urn:li:ugcPost:123 or urn:li:share:123)." },
+            count: { type: "number", description: "Number of comments to return (default 20)." },
+          },
+          required: ["postUrn"],
+        },
+      },
+      {
+        name: "linkedin_get_post_reactions",
+        description: "Get reactions (likes, celebrates, etc.) on a LinkedIn post. Requires r_organization_social for org posts.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            postUrn: { type: "string", description: "Full post URN (e.g. urn:li:ugcPost:123)." },
+            count: { type: "number", description: "Number of reactions to return (default 50)." },
+          },
+          required: ["postUrn"],
+        },
+      },
+      {
+        name: "linkedin_get_post_social_stats",
+        description: "Get engagement stats (likes, comment count, share count, impressions) for one or more LinkedIn posts.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            postUrns: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of post URNs to get stats for (e.g. [\"urn:li:ugcPost:123\"]).",
+            },
+          },
+          required: ["postUrns"],
         },
       },
       // ── Organization analytics ──────────────────────────────────────────────
@@ -587,6 +629,45 @@ function createMcpServer(): Server {
           if (!orgUrn || !text.trim()) return { content: [{ type: "text", text: "orgUrn and text are required." }], isError: true };
           const postId = await createOrgPost(accessToken, orgUrn, text);
           return { content: [{ type: "text", text: `✅ Org post published! Post ID: ${postId}` }] };
+        }
+
+        case "linkedin_get_post_comments": {
+          const postUrn = String(args.postUrn || "");
+          const count = Number(args.count) || 20;
+          if (!postUrn) return { content: [{ type: "text", text: "postUrn is required." }], isError: true };
+          const comments = await getPostComments(accessToken, postUrn, count);
+          return {
+            content: [{
+              type: "text",
+              text: comments.length === 0
+                ? "No comments found on this post."
+                : JSON.stringify(comments.map(c => ({ ...c, createdAt: new Date(c.createdAt).toISOString() })), null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_get_post_reactions": {
+          const postUrn = String(args.postUrn || "");
+          const count = Number(args.count) || 50;
+          if (!postUrn) return { content: [{ type: "text", text: "postUrn is required." }], isError: true };
+          const reactions = await getPostReactions(accessToken, postUrn, count);
+          if (reactions.length === 0) return { content: [{ type: "text", text: "No reactions found on this post." }] };
+          // Summarise by type
+          const summary: Record<string, number> = {};
+          for (const r of reactions) summary[r.reactionType] = (summary[r.reactionType] || 0) + 1;
+          return {
+            content: [{
+              type: "text",
+              text: `Total reactions: ${reactions.length}\n\nBreakdown:\n${JSON.stringify(summary, null, 2)}\n\nDetails:\n${JSON.stringify(reactions, null, 2)}`,
+            }],
+          };
+        }
+
+        case "linkedin_get_post_social_stats": {
+          const postUrns: string[] = Array.isArray(args.postUrns) ? args.postUrns : [String(args.postUrns || "")];
+          if (!postUrns.length || !postUrns[0]) return { content: [{ type: "text", text: "postUrns array is required." }], isError: true };
+          const stats = await getPostSocialStats(accessToken, postUrns);
+          return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
         }
 
         case "linkedin_get_org_follower_stats": {
