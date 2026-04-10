@@ -258,7 +258,7 @@ export async function deletePost(accessToken: string, postId: string): Promise<v
 
 export async function getOrgPages(accessToken: string): Promise<OrgPage[]> {
   const res = await axios.get(
-    `${LINKEDIN_API_BASE}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED`,
+    `${LINKEDIN_REST_BASE}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED`,
     { headers: restHeaders(accessToken) }
   );
 
