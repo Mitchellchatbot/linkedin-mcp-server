@@ -154,12 +154,17 @@ export async function getMyPosts(
     }
   }
 
-  // Fall back to ugcPosts
+  // Fall back to ugcPosts (no LinkedIn-Version header — avoids partner API gate)
   try {
     const encoded = encodeURIComponent(authorUrn);
     const res = await axios.get(
       `${LINKEDIN_API_BASE}/ugcPosts?q=authors&authors=List(${encoded})&count=${count}`,
-      { headers: restHeaders(accessToken) }
+      {
+        headers: {
+          ...authHeader(accessToken),
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
     );
 
     return (res.data.elements || []).map((el: any) => ({
@@ -296,15 +301,44 @@ export async function getOrgPosts(
   count = 10
 ): Promise<LinkedInPost[]> {
   const encoded = encodeURIComponent(orgUrn);
-  const res = await axios.get(
-    `${LINKEDIN_REST_BASE}/posts?author=${encoded}&q=author&count=${count}&sortBy=LAST_MODIFIED`,
-    { headers: restHeaders(accessToken) }
-  );
 
-  return (res.data.elements || []).map((el: any) => ({
+  // Try legacy ugcPosts first — works without LinkedIn Partner Program access
+  try {
+    const res = await axios.get(
+      `${LINKEDIN_API_BASE}/ugcPosts?q=authors&authors=List(${encoded})&count=${count}`,
+      {
+        headers: {
+          ...authHeader(accessToken),
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
+    );
+    const elements = res.data.elements || [];
+    if (elements.length > 0 || !res.data.elements) {
+      return elements.map((el: any) => ({
+        id: el.id,
+        text: el.specificContent?.["com.linkedin.ugc.ShareContent"]?.shareCommentary?.text || "",
+        createdAt: el.created?.time || 0,
+      }));
+    }
+  } catch (err: any) {
+    if (err.response?.status !== 403) throw err;
+  }
+
+  // Fall back to shares API
+  const sharesRes = await axios.get(
+    `${LINKEDIN_API_BASE}/shares?q=owners&owners=${encoded}&count=${count}`,
+    {
+      headers: {
+        ...authHeader(accessToken),
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    }
+  );
+  return (sharesRes.data.elements || []).map((el: any) => ({
     id: el.id,
-    text: el.commentary || el.text?.text || "",
-    createdAt: el.publishedAt || el.createdAt || 0,
+    text: el.text?.text || "",
+    createdAt: el.created?.time || 0,
   }));
 }
 
