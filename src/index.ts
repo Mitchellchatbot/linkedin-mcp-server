@@ -867,6 +867,20 @@ app.get("/mcp", async (req, res) => {
     });
     return;
   }
+
+  // Inject SSE keep-alive pings every 20s so Railway's 30s proxy timeout
+  // doesn't silently kill the connection while Claude waits for tool results.
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const pingInterval = setInterval(() => {
+    if (!res.writableEnded) res.write(": ping\n\n");
+  }, 20000);
+
+  res.on("close", () => clearInterval(pingInterval));
+
   await handleMcp(req, res);
 });
 app.post("/mcp", handleMcp);
