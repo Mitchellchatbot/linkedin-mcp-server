@@ -26,6 +26,18 @@ import {
   getProfile,
   createPost,
   getMyPosts,
+  deletePost,
+  getOrgPages,
+  getOrgPosts,
+  createOrgPost,
+  getOrgFollowerStats,
+  getOrgPageStats,
+  getAdAccounts,
+  getAdCampaigns,
+  getAdAnalytics,
+  getOrgEvents,
+  createOrgEvent,
+  getConnectionsCount,
   searchJobs,
   getConnections,
   searchPeople,
@@ -203,100 +215,205 @@ function createMcpServer(): Server {
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
+      // ── Profile & auth ──────────────────────────────────────────────────────
       {
         name: "linkedin_get_profile",
-        description:
-          "Get your LinkedIn profile information including name, headline, email, and profile picture URL.",
+        description: "Get your LinkedIn profile: name, email, profile picture.",
         inputSchema: { type: "object", properties: {}, required: [] },
       },
       {
+        name: "linkedin_auth_status",
+        description: "Check whether your LinkedIn account is connected and the token is valid.",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      },
+      // ── Member posts ────────────────────────────────────────────────────────
+      {
         name: "linkedin_create_post",
-        description:
-          "Create a new public LinkedIn post with the given text content.",
+        description: "Create a new public LinkedIn post on your personal profile.",
         inputSchema: {
           type: "object",
           properties: {
-            text: {
-              type: "string",
-              description: "The text content of the post (max 3000 chars).",
-            },
+            text: { type: "string", description: "Post text (max 3000 chars)." },
           },
           required: ["text"],
         },
       },
       {
         name: "linkedin_get_my_posts",
-        description: "Retrieve your recent LinkedIn posts.",
+        description: "Retrieve your recent personal LinkedIn posts.",
         inputSchema: {
           type: "object",
           properties: {
-            count: {
-              type: "number",
-              description: "Number of posts to retrieve (default 10, max 50).",
-            },
+            count: { type: "number", description: "Number of posts (default 10, max 50)." },
           },
           required: [],
         },
       },
       {
-        name: "linkedin_search_jobs",
-        description: "Search for job listings on LinkedIn.",
+        name: "linkedin_delete_post",
+        description: "Delete a LinkedIn post by its ID or URN (works for both personal and org posts you authored).",
         inputSchema: {
           type: "object",
           properties: {
-            keywords: {
-              type: "string",
-              description: "Job title, skills, or keywords to search for.",
-            },
-            location: {
-              type: "string",
-              description: "Location to search in (optional).",
-            },
-            count: {
-              type: "number",
-              description: "Number of results to return (default 10).",
-            },
+            postId: { type: "string", description: "Post ID or full URN (e.g. urn:li:ugcPost:123)." },
+          },
+          required: ["postId"],
+        },
+      },
+      // ── Organization pages ──────────────────────────────────────────────────
+      {
+        name: "linkedin_get_org_pages",
+        description: "List all LinkedIn organization/company pages you administer.",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      },
+      {
+        name: "linkedin_get_org_posts",
+        description: "Retrieve recent posts from one of your LinkedIn organization pages.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orgUrn: { type: "string", description: "Organization URN (e.g. urn:li:organization:12345). Get this from linkedin_get_org_pages." },
+            count: { type: "number", description: "Number of posts (default 10, max 50)." },
+          },
+          required: ["orgUrn"],
+        },
+      },
+      {
+        name: "linkedin_create_org_post",
+        description: "Create a post on one of your LinkedIn organization/company pages.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orgUrn: { type: "string", description: "Organization URN (e.g. urn:li:organization:12345)." },
+            text: { type: "string", description: "Post text (max 3000 chars)." },
+          },
+          required: ["orgUrn", "text"],
+        },
+      },
+      // ── Organization analytics ──────────────────────────────────────────────
+      {
+        name: "linkedin_get_org_follower_stats",
+        description: "Get follower statistics (total followers, demographics) for a LinkedIn organization page.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orgUrn: { type: "string", description: "Organization URN (e.g. urn:li:organization:12345)." },
+          },
+          required: ["orgUrn"],
+        },
+      },
+      {
+        name: "linkedin_get_org_page_stats",
+        description: "Get page view and visitor statistics for a LinkedIn organization page.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orgUrn: { type: "string", description: "Organization URN (e.g. urn:li:organization:12345)." },
+          },
+          required: ["orgUrn"],
+        },
+      },
+      // ── Ads ─────────────────────────────────────────────────────────────────
+      {
+        name: "linkedin_get_ad_accounts",
+        description: "List all LinkedIn advertising accounts you have access to.",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      },
+      {
+        name: "linkedin_get_ad_campaigns",
+        description: "List ad campaigns for a LinkedIn ad account.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            accountId: { type: "string", description: "Ad account ID (numeric). Get from linkedin_get_ad_accounts." },
+            count: { type: "number", description: "Number of campaigns to return (default 20)." },
+          },
+          required: ["accountId"],
+        },
+      },
+      {
+        name: "linkedin_get_ad_analytics",
+        description: "Get ad performance analytics (impressions, clicks, cost, conversions) for a LinkedIn ad account over a date range.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            accountId: { type: "string", description: "Ad account ID (numeric)." },
+            startDate: { type: "string", description: "Start date in YYYY-MM-DD format." },
+            endDate: { type: "string", description: "End date in YYYY-MM-DD format." },
+          },
+          required: ["accountId", "startDate", "endDate"],
+        },
+      },
+      // ── Events ──────────────────────────────────────────────────────────────
+      {
+        name: "linkedin_get_org_events",
+        description: "List upcoming or recent events for a LinkedIn organization page.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orgUrn: { type: "string", description: "Organization URN (e.g. urn:li:organization:12345)." },
+            count: { type: "number", description: "Number of events (default 10)." },
+          },
+          required: ["orgUrn"],
+        },
+      },
+      {
+        name: "linkedin_create_org_event",
+        description: "Create a LinkedIn event for an organization page.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orgUrn: { type: "string", description: "Organization URN (e.g. urn:li:organization:12345)." },
+            name: { type: "string", description: "Event name." },
+            startTime: { type: "string", description: "Start date/time as ISO 8601 string (e.g. 2026-05-01T09:00:00Z)." },
+            endTime: { type: "string", description: "End date/time as ISO 8601 string." },
+            description: { type: "string", description: "Optional event description." },
+          },
+          required: ["orgUrn", "name", "startTime", "endTime"],
+        },
+      },
+      // ── Connections ─────────────────────────────────────────────────────────
+      {
+        name: "linkedin_get_connections_count",
+        description: "Get the number of 1st-degree connections in your LinkedIn network.",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      },
+      // ── Legacy stubs ────────────────────────────────────────────────────────
+      {
+        name: "linkedin_search_jobs",
+        description: "Search for job listings on LinkedIn (requires partner-level r_jobs scope).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            keywords: { type: "string", description: "Job title or keywords." },
+            location: { type: "string", description: "Location (optional)." },
+            count: { type: "number", description: "Number of results (default 10)." },
           },
           required: ["keywords"],
         },
       },
       {
         name: "linkedin_get_connections",
-        description: "Get a list of your 1st-degree LinkedIn connections.",
+        description: "Get your 1st-degree connections list (requires partner-level r_1st_3rd_connections scope).",
         inputSchema: {
           type: "object",
           properties: {
-            count: {
-              type: "number",
-              description: "Number of connections to fetch (default 20).",
-            },
+            count: { type: "number", description: "Number of connections (default 20)." },
           },
           required: [],
         },
       },
       {
         name: "linkedin_search_people",
-        description: "Search for LinkedIn members by name, title, or company.",
+        description: "Search for LinkedIn members by name or title (requires partner-level access).",
         inputSchema: {
           type: "object",
           properties: {
-            query: {
-              type: "string",
-              description: "Name, job title, or keywords to search for.",
-            },
-            count: {
-              type: "number",
-              description: "Number of results (default 10).",
-            },
+            query: { type: "string", description: "Name or keywords." },
+            count: { type: "number", description: "Number of results (default 10)." },
           },
           required: ["query"],
         },
-      },
-      {
-        name: "linkedin_auth_status",
-        description:
-          "Check whether your LinkedIn account is connected and the token is valid.",
-        inputSchema: { type: "object", properties: {}, required: [] },
       },
     ],
   }));
@@ -430,55 +547,166 @@ function createMcpServer(): Server {
           };
         }
 
+        case "linkedin_delete_post": {
+          const postId = String(args.postId || "");
+          if (!postId) return { content: [{ type: "text", text: "postId is required." }], isError: true };
+          await deletePost(accessToken, postId);
+          return { content: [{ type: "text", text: `✅ Post ${postId} deleted.` }] };
+        }
+
+        case "linkedin_get_org_pages": {
+          const pages = await getOrgPages(accessToken);
+          return {
+            content: [{
+              type: "text",
+              text: pages.length === 0
+                ? "No organization pages found. Make sure you are an admin of at least one LinkedIn page."
+                : JSON.stringify(pages, null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_get_org_posts": {
+          const orgUrn = String(args.orgUrn || "");
+          const count = Math.min(Number(args.count) || 10, 50);
+          if (!orgUrn) return { content: [{ type: "text", text: "orgUrn is required." }], isError: true };
+          const posts = await getOrgPosts(accessToken, orgUrn, count);
+          return {
+            content: [{
+              type: "text",
+              text: posts.length === 0
+                ? "No posts found for this organization."
+                : JSON.stringify(posts.map(p => ({ id: p.id, text: p.text, createdAt: new Date(p.createdAt).toISOString() })), null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_create_org_post": {
+          const orgUrn = String(args.orgUrn || "");
+          const text = String(args.text || "").slice(0, 3000);
+          if (!orgUrn || !text.trim()) return { content: [{ type: "text", text: "orgUrn and text are required." }], isError: true };
+          const postId = await createOrgPost(accessToken, orgUrn, text);
+          return { content: [{ type: "text", text: `✅ Org post published! Post ID: ${postId}` }] };
+        }
+
+        case "linkedin_get_org_follower_stats": {
+          const orgUrn = String(args.orgUrn || "");
+          if (!orgUrn) return { content: [{ type: "text", text: "orgUrn is required." }], isError: true };
+          const stats = await getOrgFollowerStats(accessToken, orgUrn);
+          return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+        }
+
+        case "linkedin_get_org_page_stats": {
+          const orgUrn = String(args.orgUrn || "");
+          if (!orgUrn) return { content: [{ type: "text", text: "orgUrn is required." }], isError: true };
+          const stats = await getOrgPageStats(accessToken, orgUrn);
+          return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+        }
+
+        case "linkedin_get_ad_accounts": {
+          const accounts = await getAdAccounts(accessToken);
+          return {
+            content: [{
+              type: "text",
+              text: accounts.length === 0
+                ? "No ad accounts found."
+                : JSON.stringify(accounts, null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_get_ad_campaigns": {
+          const accountId = String(args.accountId || "");
+          const count = Number(args.count) || 20;
+          if (!accountId) return { content: [{ type: "text", text: "accountId is required." }], isError: true };
+          const campaigns = await getAdCampaigns(accessToken, accountId, count);
+          return {
+            content: [{
+              type: "text",
+              text: campaigns.length === 0
+                ? "No campaigns found."
+                : JSON.stringify(campaigns, null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_get_ad_analytics": {
+          const accountId = String(args.accountId || "");
+          const startDate = String(args.startDate || "");
+          const endDate = String(args.endDate || "");
+          if (!accountId || !startDate || !endDate) {
+            return { content: [{ type: "text", text: "accountId, startDate, and endDate are required." }], isError: true };
+          }
+          const analytics = await getAdAnalytics(accessToken, accountId, startDate, endDate);
+          return {
+            content: [{
+              type: "text",
+              text: analytics.length === 0
+                ? "No analytics data found for this date range."
+                : JSON.stringify(analytics, null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_get_org_events": {
+          const orgUrn = String(args.orgUrn || "");
+          const count = Number(args.count) || 10;
+          if (!orgUrn) return { content: [{ type: "text", text: "orgUrn is required." }], isError: true };
+          const events = await getOrgEvents(accessToken, orgUrn, count);
+          return {
+            content: [{
+              type: "text",
+              text: events.length === 0
+                ? "No events found for this organization."
+                : JSON.stringify(events, null, 2),
+            }],
+          };
+        }
+
+        case "linkedin_create_org_event": {
+          const orgUrn = String(args.orgUrn || "");
+          const name = String(args.name || "");
+          const startTime = String(args.startTime || "");
+          const endTime = String(args.endTime || "");
+          if (!orgUrn || !name || !startTime || !endTime) {
+            return { content: [{ type: "text", text: "orgUrn, name, startTime, and endTime are required." }], isError: true };
+          }
+          const eventId = await createOrgEvent(
+            accessToken,
+            orgUrn,
+            name,
+            new Date(startTime).getTime(),
+            new Date(endTime).getTime(),
+            args.description ? String(args.description) : undefined
+          );
+          return { content: [{ type: "text", text: `✅ Event created! Event ID: ${eventId}` }] };
+        }
+
+        case "linkedin_get_connections_count": {
+          const profile = await getProfile(accessToken);
+          const count = await getConnectionsCount(accessToken, `urn:li:person:${profile.id}`);
+          return { content: [{ type: "text", text: `You have ${count} 1st-degree connections.` }] };
+        }
+
         case "linkedin_search_jobs": {
           const keywords = String(args.keywords || "");
           const location = args.location ? String(args.location) : undefined;
           const count = Number(args.count) || 10;
           const jobs = await searchJobs(accessToken, keywords, location, count);
-          return {
-            content: [
-              {
-                type: "text",
-                text:
-                  jobs.length === 0
-                    ? "No jobs found."
-                    : JSON.stringify(jobs, null, 2),
-              },
-            ],
-          };
+          return { content: [{ type: "text", text: jobs.length === 0 ? "No jobs found." : JSON.stringify(jobs, null, 2) }] };
         }
 
         case "linkedin_get_connections": {
           const count = Number(args.count) || 20;
           const connections = await getConnections(accessToken, count);
-          return {
-            content: [
-              {
-                type: "text",
-                text:
-                  connections.length === 0
-                    ? "No connections found (this feature may require elevated API access)."
-                    : JSON.stringify(connections, null, 2),
-              },
-            ],
-          };
+          return { content: [{ type: "text", text: connections.length === 0 ? "No connections found." : JSON.stringify(connections, null, 2) }] };
         }
 
         case "linkedin_search_people": {
           const query = String(args.query || "");
           const count = Number(args.count) || 10;
           const people = await searchPeople(accessToken, query, count);
-          return {
-            content: [
-              {
-                type: "text",
-                text:
-                  people.length === 0
-                    ? "No people found."
-                    : JSON.stringify(people, null, 2),
-              },
-            ],
-          };
+          return { content: [{ type: "text", text: people.length === 0 ? "No people found." : JSON.stringify(people, null, 2) }] };
         }
 
         default:
