@@ -258,27 +258,27 @@ export async function deletePost(accessToken: string, postId: string): Promise<v
 
 export async function getOrgPages(accessToken: string): Promise<OrgPage[]> {
   const res = await axios.get(
-    `${LINKEDIN_API_BASE}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&projection=(elements*(organization~(id,name,vanityName,logoV2(original~:playableStreams))))`,
-    {
-      headers: {
-        ...authHeader(accessToken),
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-    }
+    `${LINKEDIN_API_BASE}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED`,
+    { headers: restHeaders(accessToken) }
   );
 
-  return (res.data.elements || []).map((el: any) => {
-    const org = el["organization~"] || {};
-    const logoUrl =
-      org.logoV2?.["original~"]?.elements?.[0]?.identifiers?.[0]?.identifier;
-    return {
-      id: String(org.id || ""),
-      name: org.name?.localized?.en_US || org.name || "",
-      urn: `urn:li:organization:${org.id}`,
-      vanityName: org.vanityName,
-      logoUrl,
-    };
-  });
+  // Fetch org names in parallel
+  const elements = res.data.elements || [];
+  const pages: OrgPage[] = [];
+  for (const el of elements) {
+    const orgUrn: string = el.organization || "";
+    const orgId = orgUrn.replace("urn:li:organization:", "");
+    let name = orgId;
+    try {
+      const orgRes = await axios.get(
+        `${LINKEDIN_API_BASE}/organizations/${orgId}`,
+        { headers: restHeaders(accessToken) }
+      );
+      name = orgRes.data.name?.localized?.en_US || orgRes.data.localizedName || orgId;
+    } catch {}
+    pages.push({ id: orgId, name, urn: orgUrn, vanityName: undefined });
+  }
+  return pages;
 }
 
 // ── Org posts ─────────────────────────────────────────────────────────────────
