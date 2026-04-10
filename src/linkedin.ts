@@ -302,7 +302,7 @@ export async function getOrgPosts(
 ): Promise<LinkedInPost[]> {
   const encoded = encodeURIComponent(orgUrn);
 
-  // Try legacy ugcPosts first — works without LinkedIn Partner Program access
+  // 1️⃣ Try legacy ugcPosts (no LinkedIn-Version — avoids partner API gate)
   try {
     const res = await axios.get(
       `${LINKEDIN_API_BASE}/ugcPosts?q=authors&authors=List(${encoded})&count=${count}`,
@@ -313,33 +313,43 @@ export async function getOrgPosts(
         },
       }
     );
+    // Return whatever ugcPosts gives us (even empty — some orgs use shares instead)
     const elements = res.data.elements || [];
-    if (elements.length > 0 || !res.data.elements) {
+    if (res.data.elements !== undefined) {
       return elements.map((el: any) => ({
         id: el.id,
         text: el.specificContent?.["com.linkedin.ugc.ShareContent"]?.shareCommentary?.text || "",
         createdAt: el.created?.time || 0,
       }));
     }
-  } catch (err: any) {
-    if (err.response?.status !== 403) throw err;
+  } catch (ugcErr: any) {
+    if (ugcErr.response?.status !== 403) throw ugcErr;
+    // 403 on ugcPosts — fall through to shares
   }
 
-  // Fall back to shares API
-  const sharesRes = await axios.get(
-    `${LINKEDIN_API_BASE}/shares?q=owners&owners=${encoded}&count=${count}`,
-    {
-      headers: {
-        ...authHeader(accessToken),
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-    }
-  );
-  return (sharesRes.data.elements || []).map((el: any) => ({
-    id: el.id,
-    text: el.text?.text || "",
-    createdAt: el.created?.time || 0,
-  }));
+  // 2️⃣ Fall back to shares API (needs LinkedIn-Version)
+  try {
+    const sharesRes = await axios.get(
+      `${LINKEDIN_API_BASE}/shares?q=owners&owners=${encoded}&count=${count}`,
+      {
+        headers: {
+          ...authHeader(accessToken),
+          "X-Restli-Protocol-Version": "2.0.0",
+          "LinkedIn-Version": "202504",
+        },
+      }
+    );
+    return (sharesRes.data.elements || []).map((el: any) => ({
+      id: el.id,
+      text: el.text?.text || "",
+      createdAt: el.created?.time || 0,
+    }));
+  } catch (sharesErr: any) {
+    throw new Error(
+      "Could not retrieve org posts — both ugcPosts and shares endpoints returned errors. " +
+      `Details: ${sharesErr.response?.data?.message || sharesErr.message}`
+    );
+  }
 }
 
 // ── Create org post ───────────────────────────────────────────────────────────
