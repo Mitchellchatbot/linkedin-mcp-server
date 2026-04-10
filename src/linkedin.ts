@@ -257,28 +257,34 @@ export async function deletePost(accessToken: string, postId: string): Promise<v
 // Requires rw_organization_admin or r_organization_admin
 
 export async function getOrgPages(accessToken: string): Promise<OrgPage[]> {
+  // organizationAcls requires LinkedIn Partner Program access beyond rw_organization_admin.
+  // Guide the user to use linkedin_find_org instead.
+  throw new Error(
+    "Listing managed pages requires LinkedIn Partner Program access not available with standard developer apps. " +
+    "Use linkedin_find_org_by_vanity_name instead — pass the slug from your company URL " +
+    "(e.g. linkedin.com/company/YOUR-SLUG → pass 'YOUR-SLUG')."
+  );
+}
+
+// ── Find org by vanity name ───────────────────────────────────────────────────
+
+export async function findOrgByVanityName(
+  accessToken: string,
+  vanityName: string
+): Promise<OrgPage> {
   const res = await axios.get(
-    `${LINKEDIN_REST_BASE}/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED`,
+    `${LINKEDIN_API_BASE}/organizations?q=vanityName&vanityName=${encodeURIComponent(vanityName)}`,
     { headers: restHeaders(accessToken) }
   );
 
-  // Fetch org names in parallel
-  const elements = res.data.elements || [];
-  const pages: OrgPage[] = [];
-  for (const el of elements) {
-    const orgUrn: string = el.organization || "";
-    const orgId = orgUrn.replace("urn:li:organization:", "");
-    let name = orgId;
-    try {
-      const orgRes = await axios.get(
-        `${LINKEDIN_API_BASE}/organizations/${orgId}`,
-        { headers: restHeaders(accessToken) }
-      );
-      name = orgRes.data.name?.localized?.en_US || orgRes.data.localizedName || orgId;
-    } catch {}
-    pages.push({ id: orgId, name, urn: orgUrn, vanityName: undefined });
-  }
-  return pages;
+  const org = res.data.elements?.[0] || res.data;
+  const id = String(org.id || "");
+  return {
+    id,
+    name: org.name?.localized?.en_US || org.localizedName || vanityName,
+    urn: `urn:li:organization:${id}`,
+    vanityName: org.vanityName,
+  };
 }
 
 // ── Org posts ─────────────────────────────────────────────────────────────────

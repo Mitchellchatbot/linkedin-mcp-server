@@ -28,6 +28,7 @@ import {
   getMyPosts,
   deletePost,
   getOrgPages,
+  findOrgByVanityName,
   getOrgPosts,
   getPostComments,
   getPostReactions,
@@ -266,8 +267,19 @@ function createMcpServer(): Server {
       // ── Organization pages ──────────────────────────────────────────────────
       {
         name: "linkedin_get_org_pages",
-        description: "List all LinkedIn organization/company pages you administer.",
+        description: "List LinkedIn organization pages you admin. NOTE: requires LinkedIn Partner Program — use linkedin_find_org_by_vanity_name instead.",
         inputSchema: { type: "object", properties: {}, required: [] },
+      },
+      {
+        name: "linkedin_find_org_by_vanity_name",
+        description: "Look up a LinkedIn organization page by its vanity name (the slug in the URL). E.g. for linkedin.com/company/scaled-ai pass 'scaled-ai'. Returns the org URN needed for other org tools.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            vanityName: { type: "string", description: "The company URL slug (e.g. 'scaled-ai' from linkedin.com/company/scaled-ai)." },
+          },
+          required: ["vanityName"],
+        },
       },
       {
         name: "linkedin_get_org_posts",
@@ -606,6 +618,13 @@ function createMcpServer(): Server {
                 : JSON.stringify(pages, null, 2),
             }],
           };
+        }
+
+        case "linkedin_find_org_by_vanity_name": {
+          const vanityName = String(args.vanityName || "").trim().replace(/^\/|\/$/g, "");
+          if (!vanityName) return { content: [{ type: "text", text: "vanityName is required." }], isError: true };
+          const org = await findOrgByVanityName(accessToken, vanityName);
+          return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
         }
 
         case "linkedin_get_org_posts": {
